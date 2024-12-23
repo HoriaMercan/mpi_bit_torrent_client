@@ -7,6 +7,11 @@ FileHeader::FileHeader(const std::string &filename_, int segments_no_) {
 	segments_no = segments_no_;
 }
 
+FileHeader::FileHeader() {
+	memset(filename, '\0', MAX_FILENAME);
+	segments_no = 0;
+}
+
 FileHash::FileHash() {
 	memset(x, 0, HASH_SIZE);
 }
