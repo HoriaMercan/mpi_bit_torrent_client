@@ -8,6 +8,9 @@ enum ControlTag
     NACK,
     InfoTracker,
     NoOfFiles,
+    FinishedAllDownloads,
+    WhoHasThisFile,
+    GiveMeHashes,
 };
 
 #endif /* __CONTROL_TAGS_H__ */

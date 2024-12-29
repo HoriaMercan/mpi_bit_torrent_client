@@ -1,5 +1,5 @@
 PROJECT=tema2
-SOURCES=client.cpp file_hash.cpp peer_threads.cpp
+SOURCES=client.cpp file_hash.cpp peer_threads.cpp tracker.cpp
 LIBFLAGS=
 INCPATHS=
 CFLAGS=-Wall -Werror -Wno-error=unused-variable
@@ -17,7 +17,7 @@ tema2: $(OBJECTS)
 	$(CC) $(CFLAGS) $(INCFLAGS) $(LIBFLAGS) -pthread tema2.cpp $(OBJECTS) -o tema2
 
 .cpp.o:
-	$(CC) $(CFLAGS) $(INCFLAGS) $(LIBFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(INCFLAGS) $(LIBFLAGS) -pthread -c $< -o $@
 
 clean:
 	rm -rf tema2 $(OBJECTS)

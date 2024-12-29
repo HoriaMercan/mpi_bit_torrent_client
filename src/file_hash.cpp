@@ -27,6 +27,17 @@ std::ostream& operator<< (std::ostream &o, const FileHash &f) {
 	return o;
 }
 
+DownloadingFile::DownloadingFile(std::string filename, int segments_no,
+FileHash *hashes_):
+header(filename, segments_no), hashes(hashes_) {
+	downloaded = new bool[segments_no]();
+}
+
+std::pair<FileHeader, FileHash *> DownloadingFile::ConvertToDownloaded() {
+	delete downloaded;
+	return std::make_pair(header, hashes);
+}
+
 MPI_Datatype SubscribeFileHeaderTo_MPI() {
 	MPI_Datatype custom, old_types[2];
 	int block_counts[2];

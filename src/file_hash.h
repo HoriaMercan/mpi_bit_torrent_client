@@ -30,4 +30,13 @@ struct FileHash
 
 MPI_Datatype SubscribeFileHashTo_MPI();
 
+struct DownloadingFile {
+    FileHeader header;
+    FileHash *hashes;
+    bool *downloaded;
+
+    DownloadingFile(std::string filename, int segments_no, FileHash *hashes);
+    std::pair<FileHeader, FileHash *> ConvertToDownloaded();
+};
+
 #endif /* __FILE_HASH_H__ */

@@ -2,11 +2,17 @@
 #define __CLIENT_H__
 
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 #include <mpi.h>
 
+#include <semaphore.h>
+#include <pthread.h>
+
 #include "file_hash.h"
+
+#define TRACKER_RANK 0
 
 class Entity {
 public:
@@ -23,25 +29,19 @@ protected:
 class Client: public Entity {
 public:
     Client(int rank, int numProcs);
+    ~Client();
 
     std::vector<std::pair<FileHeader, FileHash*>> owned_files;
+
     std::vector<std::string> wanted_files;
     void SendInfoToTracker();
-};
 
-class Tracker: public Entity {
-public:
-    Tracker(int numProcs);
+    void HandleDownloadingFile(DownloadingFile &file);
 
-    int ReceiveInfoFromClient();
-
-    std::unordered_map<std::string, std::vector<int>> file_to_seeds;
-
-protected:
-    std::unordered_map<std::string, std::pair<int, FileHash *>> file_to_hashes;
-    
-
-    
+    std::pair<int, FileHash *> RequestFileDetails(const std::string &filename);
+private:
+    DownloadingFile *current_downloading;
+    pthread_mutex_t downloading_mutex;
 };
 
 #endif /* __CLIENT_H__ */
