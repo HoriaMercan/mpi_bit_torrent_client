@@ -15,6 +15,7 @@ struct FileHeader
 
     FileHeader();
     FileHeader(const std::string &filename_, int segments_no_);
+    bool MatchesFilename(const char *c);
 };
 
 MPI_Datatype SubscribeFileHeaderTo_MPI();
@@ -26,6 +27,7 @@ struct FileHash
     FileHash();
     FileHash(const std::string &s);
     friend std::ostream &operator<<(std::ostream &o, const FileHash &f);
+    bool operator ==(const FileHash &other);
 };
 
 MPI_Datatype SubscribeFileHashTo_MPI();

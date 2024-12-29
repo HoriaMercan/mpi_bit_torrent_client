@@ -42,6 +42,7 @@ void *download_thread_func(void *arg)
 	read_from_input_files(ctx);
 
 	ctx->SendInfoToTracker();
+	pthread_barrier_wait(&ctx->barrier);
 
 	for (const auto &file_name: ctx->wanted_files) {
 		auto ans = ctx->RequestFileDetails(file_name);
@@ -51,6 +52,8 @@ void *download_thread_func(void *arg)
 
 		auto new_file = DownloadingFile(file_name, cnt, hashes);
 		ctx->HandleDownloadingFile(new_file);
+
+		ctx->SendMessageForFileDownloaded(file_name);
 
 		std::string new_filename = "client" + std::to_string(ctx->GetMyRank()) + "_" + file_name;
 		std::ofstream fout(new_filename);
@@ -74,6 +77,40 @@ void *upload_thread_func(void *arg)
 	
 	/* Barrier for marking the end of collecting initial data from peers */
 	MPI_Barrier(MPI_COMM_WORLD);
+	pthread_barrier_wait(&ctx->barrier);
+	MPI_Status status;
+
+	char filename_[MAX_FILENAME];
+	FileHash data;
+	int source;
+	char ans = 0;
+
+	// Loop until we will receive the STOP message from the tracker.
+	while (true) {
+		MPI_Recv(&filename_, MAX_FILENAME, MPI_CHAR, MPI_ANY_SOURCE,
+			ReqFile, MPI_COMM_WORLD, &status);
+		
+		if (status.MPI_SOURCE == TRACKER_RANK)
+			break;
+
+		source = status.MPI_SOURCE;
+
+		
+		MPI_Recv(&data, 1, ctx->Datatypes["FileHash"], source,
+			ReqFile, MPI_COMM_WORLD, &status);
+
+		if (ctx->CheckExistingSegment(filename_, data)) {
+			// Send back the file (in our case, ACK)
+			ans = ControlTag::ACK;
+		} else {
+			ans = ControlTag::NACK;
+		}
+		// std::cout << "Client "<< ctx->GetMyRank()
+		// 	<< " Received request from " << source << " with ans: " << (int)ans << "\n";
+		MPI_Send(&ans, 1, MPI_CHAR, source, AnsFile, MPI_COMM_WORLD);
+		
+
+	}
 	std::cout << "Finished in " << ctx->GetMyRank() << "\n";
 	
 	return NULL;

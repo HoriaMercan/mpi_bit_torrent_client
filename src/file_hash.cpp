@@ -12,6 +12,11 @@ FileHeader::FileHeader() {
 	segments_no = 0;
 }
 
+bool FileHeader::MatchesFilename(const char *c) {
+
+	return strncmp(filename, c, MAX_FILENAME) == 0;
+}
+
 FileHash::FileHash() {
 	memset(x, 0, HASH_SIZE);
 }
@@ -25,6 +30,10 @@ std::ostream& operator<< (std::ostream &o, const FileHash &f) {
 		o << f.x[i];
 	}
 	return o;
+}
+
+bool FileHash::operator == (const FileHash &other) {
+	return memcmp(x, other.x, HASH_SIZE) == 0;
 }
 
 DownloadingFile::DownloadingFile(std::string filename, int segments_no,

@@ -39,9 +39,15 @@ public:
     void HandleDownloadingFile(DownloadingFile &file);
 
     std::pair<int, FileHash *> RequestFileDetails(const std::string &filename);
+    void SendMessageForFileDownloaded(const std::string &filename);
+
+    bool CheckExistingSegment(const char *filename, const FileHash& data);
+    bool GetFileWithGivenHash(int client, const FileHash &hash);
+    pthread_barrier_t barrier;
 private:
     DownloadingFile *current_downloading;
     pthread_mutex_t downloading_mutex;
+    
 };
 
 #endif /* __CLIENT_H__ */

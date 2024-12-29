@@ -21,10 +21,12 @@ Client::Client(int rank, int numProcs):
 Entity(rank, numProcs) {
 	pthread_mutex_init(&this->downloading_mutex, nullptr);
 	current_downloading = nullptr;
+	pthread_barrier_init(&this->barrier, nullptr, 2);
 }
 
 Client::~Client() {
 	pthread_mutex_destroy(&this->downloading_mutex);
+	pthread_barrier_destroy(&this->barrier);
 }
 
 void Client::SendInfoToTracker() {
@@ -55,39 +57,70 @@ void Client::HandleDownloadingFile(DownloadingFile &file) {
 	int *peers = new int[numProcs - 1]();
 	int peers_cnt = 0;
 
+	int round_robin_cnt = 0;
+
 	MPI_Status status;
 
+	char * char_vec_filename = file.header.filename;
+	int char_vec_size = strnlen(char_vec_filename, MAX_FILENAME) + 1;
+
+	int SEGMENTS_FAILED = 0;
 	while (segments_to_receive > 0) {
 		if (step % 10 == 0) {
 			// Make a request to the tracker to get info about
-			// other peers/seeds that have the same file
-			char * char_vec_filename = file.header.filename;
-			int char_vec_size = strnlen(char_vec_filename, MAX_FILENAME) + 1;
+			// what peers/seeds have the same file
 			
-			std::cout << "Want who has this file for : " << char_vec_filename << " with size " << char_vec_size << std::endl;
+			std::cout << rank << "want who has this file for : " << char_vec_filename << std::endl;
 
 			MPI_Send(char_vec_filename, char_vec_size, MPI_CHAR, TRACKER_RANK, ControlTag::WhoHasThisFile, MPI_COMM_WORLD);
 			MPI_Recv(peers, numProcs, MPI_INT, TRACKER_RANK, ControlTag::WhoHasThisFile, MPI_COMM_WORLD, &status);
 
 			MPI_Get_count(&status, MPI_INT, &peers_cnt);
-		
-			std::cout << "WhoHasThisFile no " << step / 10 << " in " << rank << " :";
-			for (int i = 0; i < peers_cnt; i++) {std::cout << peers[i] << "\t";}
-			std::cout << "\n";
 		}
 
+		do {
+			round_robin_cnt = (round_robin_cnt + 1) % peers_cnt;
+			if (GetFileWithGivenHash(peers[round_robin_cnt], file.hashes[step])) {
+				pthread_mutex_lock(&downloading_mutex);
+				file.downloaded[step] = true;
+				pthread_mutex_unlock(&downloading_mutex);
+				break;
+			} else {
+				SEGMENTS_FAILED++;
+			}
+		} while (true);
+
+		std::cout << "Received segment " << step << " from file " << char_vec_filename << " in client " << rank << "\n";
+		
 		segments_to_receive--;
 		step++;
 	}
 
 
-	delete peers;
+	delete []peers;
 	pthread_mutex_lock(&downloading_mutex);
 
 	this->owned_files.push_back(file.ConvertToDownloaded());
 	current_downloading = nullptr;
 
 	pthread_mutex_unlock(&downloading_mutex);
+
+	std::cout << "SEGMENTS FAILED in " << rank << " : " << SEGMENTS_FAILED << "\n";
+}
+
+bool Client::GetFileWithGivenHash(int client, const FileHash &hash) {
+	
+	int bytes_cnt = strnlen(current_downloading->header.filename, MAX_FILENAME) + 1;
+	MPI_Send(current_downloading->header.filename, bytes_cnt, MPI_CHAR, client, 
+		ReqFile, MPI_COMM_WORLD);
+	MPI_Send(&hash, 1, Datatypes["FileHash"], client, 
+		ReqFile, MPI_COMM_WORLD);
+
+	char ans;
+	MPI_Recv(&ans, 1, MPI_CHAR, client,
+		AnsFile, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+	return ans == ControlTag::ACK;
 }
 
 std::pair<int, FileHash *> Client::RequestFileDetails(const std::string &filename) {
@@ -105,4 +138,62 @@ std::pair<int, FileHash *> Client::RequestFileDetails(const std::string &filenam
 	MPI_Recv(hashes, cnt, Datatypes["FileHash"], TRACKER_RANK, ControlTag::GiveMeHashes, MPI_COMM_WORLD, &status);
 
 	return std::make_pair(cnt, hashes);
+}
+
+void Client::SendMessageForFileDownloaded(const std::string &filename) {
+	int bytes_cnt = filename.size() + 1;
+	MPI_Send(filename.c_str(), bytes_cnt, MPI_CHAR, TRACKER_RANK, ControlTag::FinishedFileDownload, MPI_COMM_WORLD);
+}
+
+bool Client::CheckExistingSegment(const char *filename, const FileHash &data) {
+	
+	int index;
+	std::vector<std::pair<FileHeader, FileHash *>>::iterator it;
+
+	pthread_mutex_lock(&downloading_mutex);
+	// std::cout << "owned total: "<< owned_files.size() << " in " << rank << "\n";
+
+	for (it = owned_files.begin(); it != owned_files.end(); it++) {
+		
+		if (it->first.MatchesFilename(filename)) {
+
+			break;
+		}
+	}
+	if (it == owned_files.end()) {
+		// std::cout << "file not found!\t";
+		if (!this->current_downloading || 
+			!this->current_downloading->header
+				.MatchesFilename(filename)) {
+			bool ans = false;
+			pthread_mutex_unlock(&downloading_mutex);
+			return ans;
+		}
+		for (index = 0; index < current_downloading->header.segments_no; index++) {
+			if (current_downloading->hashes[index] == data)
+				break;
+		}
+		if (index == current_downloading->header.segments_no
+			|| !current_downloading->downloaded[index]) {
+			bool ans = false;
+			pthread_mutex_unlock(&downloading_mutex);
+			return ans;
+		} else {
+			bool ans = true;
+			pthread_mutex_unlock(&downloading_mutex);
+			return ans;
+		}
+	}
+	pthread_mutex_unlock(&downloading_mutex);
+
+	std::cout << "file found!\t";
+	auto hashes = it->second;
+	auto hashes_size = it->first.segments_no;
+
+	for (index = 0; index < hashes_size; index++) {
+		if (hashes[index] == data)
+			return true;
+	}
+
+	return false;
 }

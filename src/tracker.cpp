@@ -6,6 +6,13 @@ Entity(0, numProcs) {
 
 }
 
+Tracker::~Tracker() {
+    for (auto &[__, pairs]: file_to_hashes) {
+        auto &[_, array] = pairs;
+        delete []array;
+    }
+}
+
 int Tracker::ReceiveInfoFromClient() {
 	MPI_Status status;
 	int no_of_files;
@@ -63,7 +70,7 @@ void Tracker::ServeRequests() {
 		source = status.MPI_SOURCE;
 		MPI_Get_count(&status, MPI_CHAR, &bytes_cnt);
 
-		std::cout << "Received " << bytes_cnt << " from " << source << " with TAG: " << tag << "\n";
+		// std::cout << "Received " << bytes_cnt << " from " << source << " with TAG: " << tag << "\n";
 
 		switch (tag) {
 			case FinishedAllDownloads:
@@ -117,10 +124,28 @@ void Tracker::ServeRequests() {
 					MPI_Send(vec.second, vec.first, Datatypes["FileHash"], source, tag, MPI_COMM_WORLD);
 				}
 				break;
+            case FinishedFileDownload:
+                {
+                    std::string filename(data);
+                    auto &vec_peers = this->file_to_peers[filename];
+
+                    /* Search for this peer in the peer list and erase it */
+                    vec_peers.erase(source);
+
+                    this->file_to_seeds[filename].push_back(source);
+                }
+                break;
 			default: /* Should never get here! */
 			;
 		}
 
 
 	}
+}
+
+void Tracker::StopUploadingClients() {
+    char empty = 0;
+    for (int i = 1; i < numProcs; i++) {
+        MPI_Send(&empty, 1, MPI_CHAR, i, ControlTag::ReqFile, MPI_COMM_WORLD);
+    }
 }

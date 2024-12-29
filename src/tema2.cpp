@@ -7,9 +7,9 @@
 
 #include "peer_threads.h"
 #include "client.h"
+#include "tracker.h"
 #include "file_hash.h"
 
-#define TRACKER_RANK 0
 #define MAX_FILES 10
 #define MAX_CHUNKS 100
 
@@ -22,13 +22,25 @@ void tracker(int numtasks, int rank) {
         me.ReceiveInfoFromClient();
     }
 
+    std::cout.flush();
     for (const auto &[k, v]: me.file_to_seeds) {
-        std::cout << k << " - " << v[0] << "\n";
+        std::cout << k << " - ";
+        for (const auto &x: v) std::cout << x << " ";
+        std::cout << "\n";
     }
+    std::cout.flush();
 
     /* Barrier for marking the end of collecting initial data from peers */
     MPI_Barrier(MPI_COMM_WORLD);
 
+    /* Start to serve requests from the peers/seeds 
+        for downloading all the needed files. */
+    me.ServeRequests();
+
+    /* Send messages to all the clients to stop (by stoping their
+        upload thread). */
+    me.StopUploadingClients();
+   
 }
 
 void peer(int numtasks, int rank) {
