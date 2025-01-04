@@ -67,7 +67,8 @@ void *download_thread_func(void *arg)
 
 	// Send finished all downloads message
 	char info = 0;
-	MPI_Send(&info, 1, MPI_CHAR, TRACKER_RANK, ControlTag::FinishedAllDownloads, MPI_COMM_WORLD);
+	MPI_Send(&info, 1, MPI_CHAR, TRACKER_RANK,
+		ControlTag::FinishedAllDownloads, MPI_COMM_WORLD);
 	return NULL;
 }
 
@@ -98,6 +99,8 @@ void *upload_thread_func(void *arg)
 		
 		MPI_Recv(&data, 1, ctx->Datatypes["FileHash"], source,
 			ReqFile, MPI_COMM_WORLD, &status);
+		
+		ctx->busy_score.SubscribeNewRequest(source);
 
 		if (ctx->CheckExistingSegment(filename_, data)) {
 			// Send back the file (in our case, ACK)
@@ -114,4 +117,29 @@ void *upload_thread_func(void *arg)
 	std::cout << "Finished in " << ctx->GetMyRank() << "\n";
 	
 	return NULL;
+}
+
+void *get_loading_info_thread_func(void *arg) {
+	auto ctx = (Client *) arg;
+
+	MPI_Status status;
+	char _req;
+	int source;
+
+	while (true) {
+		MPI_Recv(&_req, 1, MPI_CHAR, MPI_ANY_SOURCE,
+			ControlTag::HowBusyReq, MPI_COMM_WORLD, &status);
+
+		if (status.MPI_SOURCE == TRACKER_RANK) {
+			break;
+		}
+
+		source = status.MPI_SOURCE;
+		_req = ctx->busy_score.CalculateBusyness();
+
+		MPI_Send(&_req, 1, MPI_CHAR, source,
+			ControlTag::HowBusyAns, MPI_COMM_WORLD);
+	}
+
+	return nullptr;
 }

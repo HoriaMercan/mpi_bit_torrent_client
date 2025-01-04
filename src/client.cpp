@@ -45,6 +45,8 @@ void Client::SendInfoToTracker() {
 	MPI_Recv(&ok, 1, MPI_BYTE, 0, ControlTag::ACK, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 }
 
+#define BUSY_SCORE 1
+
 void Client::HandleDownloadingFile(DownloadingFile &file) {
 	pthread_mutex_lock(&downloading_mutex);
 	current_downloading = &file;
@@ -78,6 +80,9 @@ void Client::HandleDownloadingFile(DownloadingFile &file) {
 			MPI_Get_count(&status, MPI_INT, &peers_cnt);
 		}
 
+		// Perform round robin algorithm for load balancing segment
+		// downloading from other clients
+		#ifdef ROUND_ROBIN
 		do {
 			round_robin_cnt = (round_robin_cnt + 1) % peers_cnt;
 			if (GetFileWithGivenHash(peers[round_robin_cnt], file.hashes[step])) {
@@ -88,7 +93,27 @@ void Client::HandleDownloadingFile(DownloadingFile &file) {
 			} else {
 				SEGMENTS_FAILED++;
 			}
+			
 		} while (true);
+		#endif
+
+		#ifdef BUSY_SCORE
+		auto scores_and_peers = GetScoresForPeers(peers, peers_cnt);
+		std::set<std::pair<char, int>>::iterator it = scores_and_peers.begin();
+		do {
+			it = std::next(it);
+			if (it == scores_and_peers.end()) it = scores_and_peers.begin();
+
+			if (GetFileWithGivenHash(it->second, file.hashes[step])) {
+				pthread_mutex_lock(&downloading_mutex);
+				file.downloaded[step] = true;
+				pthread_mutex_unlock(&downloading_mutex);
+				break;
+			} else {
+				SEGMENTS_FAILED++;
+			}
+		} while (true);
+		#endif
 
 		std::cout << "Received segment " << step << " from file " << char_vec_filename << " in client " << rank << "\n";
 		
@@ -97,7 +122,7 @@ void Client::HandleDownloadingFile(DownloadingFile &file) {
 	}
 
 
-	delete []peers;
+	delete[] peers;
 	pthread_mutex_lock(&downloading_mutex);
 
 	this->owned_files.push_back(file.ConvertToDownloaded());
@@ -186,7 +211,7 @@ bool Client::CheckExistingSegment(const char *filename, const FileHash &data) {
 	}
 	pthread_mutex_unlock(&downloading_mutex);
 
-	std::cout << "file found!\t";
+	// std::cout << "file found!\t";
 	auto hashes = it->second;
 	auto hashes_size = it->first.segments_no;
 
@@ -196,4 +221,30 @@ bool Client::CheckExistingSegment(const char *filename, const FileHash &data) {
 	}
 
 	return false;
+}
+
+/**
+ * Make requests to all other peers that have the current segment
+ * of the file
+ */
+std::set<std::pair<char, int>> Client::GetScoresForPeers(int *peers, int peers_cnt) {
+	char score;
+	int source;
+	MPI_Status status;
+
+	for (int i = 0; i < peers_cnt; i++) {
+		MPI_Send(&score, 1, MPI_CHAR, peers[i],
+			ControlTag::HowBusyReq, MPI_COMM_WORLD);
+	}
+
+	std::set<std::pair<char, int>> ans;
+
+	for (int i = 0; i < peers_cnt; i++) {
+		MPI_Recv(&score, 1, MPI_CHAR, MPI_ANY_SOURCE,
+			ControlTag::HowBusyAns, MPI_COMM_WORLD, &status);
+
+		ans.insert(std::make_pair(score, status.MPI_SOURCE));
+	}
+
+	return ans;
 }

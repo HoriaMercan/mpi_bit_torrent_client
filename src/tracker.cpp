@@ -147,5 +147,6 @@ void Tracker::StopUploadingClients() {
     char empty = 0;
     for (int i = 1; i < numProcs; i++) {
         MPI_Send(&empty, 1, MPI_CHAR, i, ControlTag::ReqFile, MPI_COMM_WORLD);
+		MPI_Send(&empty, 1, MPI_CHAR, i, ControlTag::HowBusyReq, MPI_COMM_WORLD);
     }
 }

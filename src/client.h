@@ -6,11 +6,14 @@
 #include <string>
 #include <vector>
 #include <mpi.h>
+#include <atomic>
+#include <set>
 
 #include <semaphore.h>
 #include <pthread.h>
 
 #include "file_hash.h"
+#include "busyness_score.h"
 
 #define TRACKER_RANK 0
 
@@ -44,10 +47,12 @@ public:
     bool CheckExistingSegment(const char *filename, const FileHash& data);
     bool GetFileWithGivenHash(int client, const FileHash &hash);
     pthread_barrier_t barrier;
+
+    BusyScore busy_score;
+    std::set<std::pair<char, int>> GetScoresForPeers(int *peers, int peers_cnt);
 private:
     DownloadingFile *current_downloading;
     pthread_mutex_t downloading_mutex;
-    
 };
 
 #endif /* __CLIENT_H__ */

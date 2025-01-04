@@ -1,5 +1,6 @@
 PROJECT=tema2
-SOURCES=client.cpp file_hash.cpp peer_threads.cpp tracker.cpp
+SOURCES=client.cpp file_hash.cpp peer_threads.cpp tracker.cpp \
+ busyness_score.cpp
 LIBFLAGS=
 INCPATHS=
 CFLAGS=-Wall -Werror -Wno-error=unused-variable

@@ -14,6 +14,8 @@ enum ControlTag
     GiveMeHashes,
     ReqFile, /* Request for file segment. */
     AnsFile, /* Send response for file segment. */
+    HowBusyReq,
+    HowBusyAns,
 };
 
 #endif /* __CONTROL_TAGS_H__ */

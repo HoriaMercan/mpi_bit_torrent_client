@@ -46,6 +46,7 @@ void tracker(int numtasks, int rank) {
 void peer(int numtasks, int rank) {
     pthread_t download_thread;
     pthread_t upload_thread;
+    pthread_t busy_info_thread;
     void *status;
     int r;
 
@@ -65,6 +66,12 @@ void peer(int numtasks, int rank) {
         exit(-1);
     }
 
+    r = pthread_create(&busy_info_thread, NULL, get_loading_info_thread_func, (void *) &me);
+    if (r) {
+        printf("Eroare la crearea thread-ului de busyness\n");
+        exit(-1);
+    }
+
     r = pthread_join(download_thread, &status);
     if (r) {
         printf("Eroare la asteptarea thread-ului de download\n");
@@ -74,6 +81,12 @@ void peer(int numtasks, int rank) {
     r = pthread_join(upload_thread, &status);
     if (r) {
         printf("Eroare la asteptarea thread-ului de upload\n");
+        exit(-1);
+    }
+
+    r = pthread_join(busy_info_thread, &status);
+    if (r) {
+        printf("Eroare la asteptarea thread-ului de busy\n");
         exit(-1);
     }
 }
