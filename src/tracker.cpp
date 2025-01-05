@@ -43,8 +43,6 @@ int Tracker::ReceiveInfoFromClient() {
 			auto &v = file_to_seeds[filename];
 			v.push_back(source);
 		}
-
-		std::cout << "received " << filename << " from " << source << "\n";
 	}
 
 	char ok = ControlTag::ACK;
@@ -70,8 +68,6 @@ void Tracker::ServeRequests() {
 		source = status.MPI_SOURCE;
 		MPI_Get_count(&status, MPI_CHAR, &bytes_cnt);
 
-		// std::cout << "Received " << bytes_cnt << " from " << source << " with TAG: " << tag << "\n";
-
 		switch (tag) {
 			case FinishedAllDownloads:
 				remaining_peers_for_download--;
@@ -80,10 +76,6 @@ void Tracker::ServeRequests() {
 			case WhoHasThisFile: 
 				{
 					std::string filename(data);
-
-					std::cout.flush();
-					std::cout << "WhoHasThisFile from " << source << "with: " << filename << "\n";
-                    std::cout.flush();
 
 					auto &all_seeds = this->file_to_seeds[filename];
 
@@ -112,9 +104,6 @@ void Tracker::ServeRequests() {
 			case GiveMeHashes:
 				{
 					std::string filename(data);
-
-					// std::cout.flush();
-					// std::cout << "GiveMeHashes from " << source << " with:" << filename << "\n";
 
 					auto &vec = this->file_to_hashes[filename];
 

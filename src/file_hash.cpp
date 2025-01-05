@@ -2,56 +2,66 @@
 
 #include <cstring>
 
-FileHeader::FileHeader(const std::string &filename_, int segments_no_) {
+FileHeader::FileHeader(const std::string &filename_, int segments_no_)
+{
 	memccpy(filename, filename_.c_str(), '\0', MAX_FILENAME);
 	segments_no = segments_no_;
 }
 
-FileHeader::FileHeader() {
+FileHeader::FileHeader()
+{
 	memset(filename, '\0', MAX_FILENAME);
 	segments_no = 0;
 }
 
-bool FileHeader::MatchesFilename(const char *c) {
+bool FileHeader::MatchesFilename(const char *c)
+{
 
 	return strncmp(filename, c, MAX_FILENAME) == 0;
 }
 
-FileHash::FileHash() {
+FileHash::FileHash()
+{
 	memset(x, 0, HASH_SIZE);
 }
 
-FileHash::FileHash(const std::string &s) {
+FileHash::FileHash(const std::string &s)
+{
 	memccpy(x, s.c_str(), '\0', HASH_SIZE);
 }
 
-std::ostream& operator<< (std::ostream &o, const FileHash &f) {
+std::ostream &operator<<(std::ostream &o, const FileHash &f)
+{
 	for (unsigned i = 0; i < HASH_SIZE; i++) {
 		o << f.x[i];
 	}
 	return o;
 }
 
-bool FileHash::operator == (const FileHash &other) {
+bool FileHash::operator==(const FileHash &other)
+{
 	return memcmp(x, other.x, HASH_SIZE) == 0;
 }
 
 DownloadingFile::DownloadingFile(std::string filename, int segments_no,
-FileHash *hashes_):
-header(filename, segments_no), hashes(hashes_) {
+								 FileHash *hashes_) : header(filename,
+															 segments_no),
+													  hashes(hashes_)
+{
 	downloaded = new bool[segments_no]();
 }
 
-std::pair<FileHeader, FileHash *> DownloadingFile::ConvertToDownloaded() {
+std::pair<FileHeader, FileHash *> DownloadingFile::ConvertToDownloaded()
+{
 	delete downloaded;
 	return std::make_pair(header, hashes);
 }
 
-MPI_Datatype SubscribeFileHeaderTo_MPI() {
+MPI_Datatype SubscribeFileHeaderTo_MPI()
+{
 	MPI_Datatype custom, old_types[2];
 	int block_counts[2];
 	MPI_Aint offsets[2];
-	
 
 	offsets[0] = offsetof(FileHeader, filename);
 	old_types[0] = MPI_CHAR;
@@ -67,7 +77,8 @@ MPI_Datatype SubscribeFileHeaderTo_MPI() {
 	return custom;
 }
 
-MPI_Datatype SubscribeFileHashTo_MPI() {
+MPI_Datatype SubscribeFileHashTo_MPI()
+{
 	MPI_Datatype custom_type, old_types[1];
 	int blockcounts[1];
 	MPI_Aint offsets[1];
@@ -78,6 +89,6 @@ MPI_Datatype SubscribeFileHashTo_MPI() {
 
 	MPI_Type_create_struct(1, blockcounts, offsets, old_types, &custom_type);
 	MPI_Type_commit(&custom_type);
-	
+
 	return custom_type;
 }

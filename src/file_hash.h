@@ -27,12 +27,13 @@ struct FileHash
     FileHash();
     FileHash(const std::string &s);
     friend std::ostream &operator<<(std::ostream &o, const FileHash &f);
-    bool operator ==(const FileHash &other);
+    bool operator==(const FileHash &other);
 };
 
 MPI_Datatype SubscribeFileHashTo_MPI();
 
-struct DownloadingFile {
+struct DownloadingFile
+{
     FileHeader header;
     FileHash *hashes;
     bool *downloaded;

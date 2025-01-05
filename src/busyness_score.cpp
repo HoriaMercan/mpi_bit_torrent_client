@@ -25,5 +25,7 @@ void BusyScore::SubscribeNewRequest(int client) {
 }
 
 int BusyScore::CalculateBusyness() {
-    return requests_per_client.size();
+	if (requests_per_client.find(0) == requests_per_client.end())
+		return requests_per_client.size();
+	return requests_per_client.size() - 1;
 }
