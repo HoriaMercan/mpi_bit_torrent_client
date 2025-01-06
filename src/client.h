@@ -17,6 +17,10 @@
 
 #define TRACKER_RANK 0
 
+/**
+ * Parent Class for both Client and Tracker that will mantain
+ * the new MPI_Datatypes created. 
+ */
 class Entity {
 public:
     Entity(int rank, int numProcs);
@@ -49,6 +53,7 @@ public:
     pthread_barrier_t barrier;
 
     BusyScore busy_score;
+    std::atomic<int>get_info_counter;
     std::set<std::pair<char, int>> GetScoresForPeers(int *peers, int peers_cnt);
 private:
     DownloadingFile *current_downloading;

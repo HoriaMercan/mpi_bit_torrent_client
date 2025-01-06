@@ -53,10 +53,13 @@ DownloadingFile::DownloadingFile(std::string filename, int segments_no,
 
 std::pair<FileHeader, FileHash *> DownloadingFile::ConvertToDownloaded()
 {
-	delete downloaded;
+	delete[] downloaded;
 	return std::make_pair(header, hashes);
 }
 
+/**
+ * Function to create an MPI association for FileHeader struct.
+ */
 MPI_Datatype SubscribeFileHeaderTo_MPI()
 {
 	MPI_Datatype custom, old_types[2];
@@ -77,6 +80,9 @@ MPI_Datatype SubscribeFileHeaderTo_MPI()
 	return custom;
 }
 
+/**
+ * Function to create an MPI association for FileHash struct.
+ */
 MPI_Datatype SubscribeFileHashTo_MPI()
 {
 	MPI_Datatype custom_type, old_types[1];

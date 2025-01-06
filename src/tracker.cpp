@@ -13,6 +13,9 @@ Tracker::~Tracker() {
     }
 }
 
+/**
+ * Function for receiving all the initial information from any client.
+ */
 int Tracker::ReceiveInfoFromClient() {
 	MPI_Status status;
 	int no_of_files;
@@ -20,6 +23,7 @@ int Tracker::ReceiveInfoFromClient() {
 	FileHeader header;
 	FileHash *hashes;
 
+	// Firstly the tracker will receive the number of files that the client owns.
 	MPI_Recv(&no_of_files, 1, MPI_INT, MPI_ANY_SOURCE,
 		ControlTag::NoOfFiles, MPI_COMM_WORLD, &status);
 	
@@ -27,6 +31,8 @@ int Tracker::ReceiveInfoFromClient() {
 
 	for (int i = 0; i < no_of_files; i++)
 	{
+		// Tracker has to receive all the filenames and hashes from the source starting
+		// the request.
 		MPI_Recv(&header, 1, Datatypes["FileHeader"], source,
 		ControlTag::InfoTracker, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
@@ -51,6 +57,9 @@ int Tracker::ReceiveInfoFromClient() {
 	return source;
 }
 
+/**
+ * Serving logic for the tracker.
+ */
 void Tracker::ServeRequests() {
 	int remaining_peers_for_download = this->numProcs - 1;
 	char data[MAX_FILENAME];
@@ -60,6 +69,8 @@ void Tracker::ServeRequests() {
 	ControlTag tag = ControlTag::None;
 	int source;
 
+	// Tracker is waiting for all the peers to finish downloading
+	// all of their needed files.
 	while (remaining_peers_for_download > 0) {
 		MPI_Recv(data, MAX_FILENAME, MPI_CHAR, MPI_ANY_SOURCE, MPI_ANY_TAG,
 			MPI_COMM_WORLD, &status);
@@ -76,7 +87,6 @@ void Tracker::ServeRequests() {
 			case WhoHasThisFile: 
 				{
 					std::string filename(data);
-
 					auto &all_seeds = this->file_to_seeds[filename];
 
 					std::vector<int> vector_to_be_sent(all_seeds.begin(), all_seeds.end());
@@ -96,8 +106,9 @@ void Tracker::ServeRequests() {
                     }
 
 					int size_ = vector_to_be_sent.size();
+					
+					// Send the vector with the peers/seeds that have the requested file.
 					MPI_Send(&vector_to_be_sent[0], size_, MPI_INT, source, tag, MPI_COMM_WORLD);
-
 
 				}
 				break;
@@ -132,6 +143,10 @@ void Tracker::ServeRequests() {
 	}
 }
 
+/**
+ * Send messages to all connected clients to stop waiting for
+ * upload requests from others.
+ */
 void Tracker::StopUploadingClients() {
     char empty = 0;
     for (int i = 1; i < numProcs; i++) {

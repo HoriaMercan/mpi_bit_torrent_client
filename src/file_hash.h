@@ -8,6 +8,11 @@
 #define HASH_SIZE 32
 #define MAX_FILENAME 15
 
+/**
+ * Struct for a better organization of files metadata
+ *  -> filename
+ *  -> segments number
+ */
 struct FileHeader
 {
     char filename[MAX_FILENAME];
@@ -20,6 +25,10 @@ struct FileHeader
 
 MPI_Datatype SubscribeFileHeaderTo_MPI();
 
+/**
+ * Struct for organizing a hash and overloading operators for
+ * a better use.
+ */
 struct FileHash
 {
     char x[HASH_SIZE];
@@ -32,6 +41,14 @@ struct FileHash
 
 MPI_Datatype SubscribeFileHashTo_MPI();
 
+/**
+ * Struct for organizing a file details of a current
+ * downloading file.
+ * 
+ * downloaded array will contain the following info:
+ *  downloaded[i] == true <=> the segment with hash hashes[i]
+ *          has been downloaded.
+ */
 struct DownloadingFile
 {
     FileHeader header;

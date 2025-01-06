@@ -52,8 +52,11 @@ void *download_thread_func(void *arg)
 		FileHash *hashes = ans.second;
 
 		auto new_file = DownloadingFile(file_name, cnt, hashes);
+
+		// Start and download segments from other clients.
 		ctx->HandleDownloadingFile(new_file);
 
+		// Announce the tracker that now the client owns all the hashes.
 		ctx->SendMessageForFileDownloaded(file_name);
 
 		std::string new_filename =
@@ -101,13 +104,13 @@ void *upload_thread_func(void *arg)
 		MPI_Recv(&data, 1, ctx->Datatypes["FileHash"], source,
 				 ReqFile, MPI_COMM_WORLD, &status);
 
+		ctx->busy_score.SubscribeNewRequest(source, ctx->get_info_counter);
 		if (ctx->CheckExistingSegment(filename_, data)) {
 			// Send back the file (in our case, ACK)
 			ans = ControlTag::ACK;
-			ctx->busy_score.SubscribeNewRequest(source);
+			
 		} else {
 			ans = ControlTag::NACK;
-			ctx->busy_score.SubscribeNewRequest(0);
 		}
 
 		MPI_Send(&ans, 1, MPI_CHAR, source, AnsFile, MPI_COMM_WORLD);
@@ -126,16 +129,18 @@ void *get_loading_info_thread_func(void *arg)
 
 	pthread_barrier_wait(&ctx->barrier);
 
+	// Loop until we will receive the STOP message from the tracker.
 	while (true) {
 		MPI_Recv(&_req, 1, MPI_CHAR, MPI_ANY_SOURCE,
 				 ControlTag::HowBusyReq, MPI_COMM_WORLD, &status);
 
+		ctx->get_info_counter++;
 		if (status.MPI_SOURCE == TRACKER_RANK) {
 			break;
 		}
 
 		source = status.MPI_SOURCE;
-		_req = ctx->busy_score.CalculateBusyness();
+		_req = ctx->busy_score.CalculateBusyness(ctx->get_info_counter);
 
 		MPI_Send(&_req, 1, MPI_CHAR, source,
 				 ControlTag::HowBusyAns, MPI_COMM_WORLD);

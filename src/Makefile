@@ -3,7 +3,7 @@ SOURCES=client.cpp file_hash.cpp peer_threads.cpp tracker.cpp \
  busyness_score.cpp
 LIBFLAGS=
 INCPATHS=
-LINKFLAGS=ROUND_ROBIN DEBUG
+LINKFLAGS=BUSY_SCORE
 CFLAGS=-Wall -Werror -Wno-error=unused-variable
 CC=mpic++
 

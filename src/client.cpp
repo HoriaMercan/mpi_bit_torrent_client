@@ -20,14 +20,23 @@ Client::Client(int rank, int numProcs) : Entity(rank, numProcs)
 	pthread_mutex_init(&this->downloading_mutex, nullptr);
 	current_downloading = nullptr;
 	pthread_barrier_init(&this->barrier, nullptr, 3);
+	get_info_counter = 0;
 }
 
 Client::~Client()
 {
 	pthread_mutex_destroy(&this->downloading_mutex);
 	pthread_barrier_destroy(&this->barrier);
+
+	for (auto &[_, v]: owned_files) {
+		delete[] v;
+	}
 }
 
+/**
+ * This function is used to send to the tracker initial information about
+ * all the files that the client owns.
+ */
 void Client::SendInfoToTracker()
 {
 	int no_of_files = this->owned_files.size();
@@ -49,8 +58,10 @@ void Client::SendInfoToTracker()
 			 MPI_STATUS_IGNORE);
 }
 
-//#define BUSY_SCORE 1
-
+/**
+ * Current function will handle the full 'downloading' of a file
+ * from other seeds & peers.
+ */
 void Client::HandleDownloadingFile(DownloadingFile &file)
 {
 	pthread_mutex_lock(&downloading_mutex);
@@ -92,23 +103,25 @@ void Client::HandleDownloadingFile(DownloadingFile &file)
 			MPI_Get_count(&status, MPI_INT, &peers_cnt);
 		}
 
-// Perform round robin algorithm for load balancing segment
-// downloading from other clients
 #ifdef ROUND_ROBIN
+		// Perform round robin algorithm for  the current downloading segment
 		do
 		{
 			round_robin_cnt = (round_robin_cnt + 1) % peers_cnt;
+			// Try to "get" the segment-file from a peer
 			if (GetFileWithGivenHash(peers[round_robin_cnt], file.hashes[step]))
 			{
 				pthread_mutex_lock(&downloading_mutex);
 				file.downloaded[step] = true;
 				pthread_mutex_unlock(&downloading_mutex);
+				#ifdef DEBUG
 				if (segments_from_client.find(peers[round_robin_cnt]) !=
 											segments_from_client.end()) {
 					segments_from_client[peers[round_robin_cnt]]++;
 				} else {
 					segments_from_client[peers[round_robin_cnt]] = 1;
 				}
+				#endif /* DEBUG */
 				break;
 			}
 			else
@@ -117,41 +130,40 @@ void Client::HandleDownloadingFile(DownloadingFile &file)
 			}
 
 		} while (true);
-#endif
+#endif /* ROUND_ROBIN */
 
 #ifdef BUSY_SCORE
+		// Get scores associated with the peers & seeds
 		auto scores_and_peers = GetScoresForPeers(peers, peers_cnt);
 
-#ifdef DEBUG
-		std::cout << "Scores received by " << this->rank << ": ";
-		for (const auto &x: scores_and_peers) {
-			std::cout << int(x.first) << " " << int(x.second) << "\t";
-		}
-		std::cout << "\n";
-#endif
+		// Start with the peer having the lowest score and try to
+		// request the current segment from it 
 		std::set < std::pair < char, int >> ::iterator
 		it = scores_and_peers.begin();
 		do {
 			if (it == scores_and_peers.end())
 				it = scores_and_peers.begin();
 
+			// Try to "get" the segment-file from a peer
 			if (GetFileWithGivenHash(it->second, file.hashes[step])) {
 				pthread_mutex_lock(&downloading_mutex);
 				file.downloaded[step] = true;
 				pthread_mutex_unlock(&downloading_mutex);
+				#ifdef DEBUG
 				if (segments_from_client.find(it->second) !=
 											segments_from_client.end()) {
 					segments_from_client[it->second]++;
 				} else {
 					segments_from_client[it->second] = 1;
 				}
+				#endif /* DEBUG */
 				break;
 			} else {
 				it = std::next(it);
 				SEGMENTS_FAILED++;
 			}
 		} while (true);
-#endif
+#endif /* BUSY_SCORE */
 
 		segments_to_receive--;
 		step++;
@@ -160,6 +172,7 @@ void Client::HandleDownloadingFile(DownloadingFile &file)
 	delete[] peers;
 	pthread_mutex_lock(&downloading_mutex);
 
+	// Finish file downloading by considering it an "fully owned" file
 	this->owned_files.push_back(file.ConvertToDownloaded());
 	current_downloading = nullptr;
 
@@ -175,11 +188,18 @@ void Client::HandleDownloadingFile(DownloadingFile &file)
 #endif /* DEBUG */
 }
 
+/**
+ * This function will simulate the request to a client for a specific segment
+ * (represented by its hash). When the answer received from the other client
+ * is ACK, we will consider that the segment was fully downloaded.
+ */
 bool Client::GetFileWithGivenHash(int client, const FileHash &hash)
 {
 
 	int bytes_cnt =
 	strnlen(current_downloading->header.filename, MAX_FILENAME) + 1;
+
+	// When making request, we will use a fileID (in this case the filename) and the hash
 	MPI_Send(current_downloading->header.filename, bytes_cnt, MPI_CHAR, client,
 			 ReqFile, MPI_COMM_WORLD);
 	MPI_Send(&hash, 1, Datatypes["FileHash"], client,
@@ -192,6 +212,10 @@ bool Client::GetFileWithGivenHash(int client, const FileHash &hash)
 	return ans == ControlTag::ACK;
 }
 
+/**
+ * Request hashes for a file (represented by its filename) from the
+ * tracker.
+ */
 std::pair<int, FileHash *>
 Client::RequestFileDetails(const std::string &filename)
 {
@@ -212,6 +236,10 @@ Client::RequestFileDetails(const std::string &filename)
 	return std::make_pair(cnt, hashes);
 }
 
+/**
+ * Send a message to the tracker that the client has finished to download
+ * a file such that it can be considered a seed.
+ */
 void Client::SendMessageForFileDownloaded(const std::string &filename)
 {
 	int bytes_cnt = filename.size() + 1;
@@ -219,23 +247,31 @@ void Client::SendMessageForFileDownloaded(const std::string &filename)
 			 ControlTag::FinishedFileDownload, MPI_COMM_WORLD);
 }
 
+/**
+ * Checks whether the client has or has not a specific hash for a file.
+ * Equivalent with having or not a specific segment.
+ */
 bool Client::CheckExistingSegment(const char *filename, const FileHash &data)
 {
 
 	int index;
-	std::vector < std::pair < FileHeader, FileHash * >> ::iterator
-	it;
+	std::vector < std::pair < FileHeader, FileHash * >> ::iterator it;
 
 	pthread_mutex_lock(&downloading_mutex);
 
 	for (it = owned_files.begin(); it != owned_files.end(); it++) {
-
+		// Search for the file with the given filename
 		if (it->first.MatchesFilename(filename)) {
-
 			break;
 		}
 	}
+	// File not found in the already downloaded array
 	if (it == owned_files.end()) {
+		// Has to check whether the requested filename
+		// is the file that the client is currently downloading.
+
+		// If the currently downloading file has a different name,
+		// therefore the client doesn't have it.
 		if (!this->current_downloading ||
 			!this->current_downloading->header
 			.MatchesFilename(filename)) {
@@ -243,11 +279,15 @@ bool Client::CheckExistingSegment(const char *filename, const FileHash &data)
 			pthread_mutex_unlock(&downloading_mutex);
 			return ans;
 		}
+
+		// Else, search for the index of the requested hash.
 		for (index = 0;
 			 index < current_downloading->header.segments_no; index++) {
 			if (current_downloading->hashes[index] == data)
 				break;
 		}
+
+		// If it's not downloaded, return false. Else, return true.
 		if (index == current_downloading->header.segments_no ||
 			!current_downloading->downloaded[index]) {
 			bool ans = false;
@@ -261,10 +301,13 @@ bool Client::CheckExistingSegment(const char *filename, const FileHash &data)
 	}
 	pthread_mutex_unlock(&downloading_mutex);
 
+	// The hash should be present in a fully owned file.
 	auto hashes = it->second;
 	auto hashes_size = it->first.segments_no;
 
 	for (index = 0; index < hashes_size; index++) {
+		// The hash really exists, return true (equivalent with
+		// sending the file).
 		if (hashes[index] == data)
 			return true;
 	}
@@ -274,7 +317,7 @@ bool Client::CheckExistingSegment(const char *filename, const FileHash &data)
 
 /**
  * Make requests to all other peers that have the current segment
- * of the file
+ * of the file.
  */
 std::set <std::pair<char, int>>
 Client::GetScoresForPeers(int *peers, int peers_cnt)

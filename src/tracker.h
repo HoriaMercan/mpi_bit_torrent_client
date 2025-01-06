@@ -10,7 +10,10 @@
 #include "file_hash.h"
 #include "client.h"
 
-
+/**
+ * Class for important functionalities
+ * of the tracker.
+ */
 class Tracker: public Entity {
 public:
     Tracker(int numProcs);
